@@ -10,7 +10,6 @@ class Codewriter:
         self.count_3 = 0
         self.count_4 = 0
     
-
     def write(self, mgs):
         print("{}".format(mgs), file=self.output)
 
