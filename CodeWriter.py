@@ -1,4 +1,4 @@
-class Codewriter:
+class CodeWriter:
 
     def __init__ (self, output_file):
 

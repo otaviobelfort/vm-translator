@@ -1,4 +1,3 @@
-#!usr/bin/env python3
 class Parser():
 
     def __init__(self, input_file):
@@ -45,6 +44,17 @@ class Parser():
                 return "If"
             else : 
                 return None
+
+    def commandType(self):
+        command = self.currTokenIndex()
+        if (command in ['add', 'sub', 'eq' , 'gt' , 'lt' , 'and' , 'or']):
+            return "arith_logic_table_binary"
+        if (command in ['neg','not']):
+            return "arith_logic_unary"
+        if (command in ['push','pop']):
+            return "push_pop"
+        else:
+            print("Sintaxe Inválida")
     
     def arg1(self):
         if(self.nextCommand() == "Arithmetic"):
