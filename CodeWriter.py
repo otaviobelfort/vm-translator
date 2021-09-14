@@ -1,7 +1,6 @@
 class CodeWriter:
 
     def __init__ (self, output_file):
-
         self.output_f = open(output_file, "w")
         self.module_name = "Bar"
         # count ++
@@ -9,9 +8,12 @@ class CodeWriter:
         self.count_2 = 0
         self.count_3 = 0
         self.count_4 = 0
-    
-    def write(self, mgs):
-        print("{}".format(mgs), file=self.output)
+
+    def write(self, string):
+        self.output_f.write(string + "\n")
+
+    def close(self):
+        self.output_f.close()
 
     def segmentPointer(self, segment, index):
         if(segment == "local"): return "LCL"
@@ -350,10 +352,6 @@ class CodeWriter:
         self.write("@R14")
         self.write("A=M")
         self.write("0;JMP")
-
-
-    def close(self):
-        self.output.close()
     
 
         

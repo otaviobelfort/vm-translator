@@ -1,6 +1,9 @@
 # vm-translator
 
+## Como rodar esse Projeto?
 
+	1. cd /vm-translator
+	2. No terminal rodar o comando: python Main.py 07\MemoryAccess\BasicTest
 
 notion: https://www.notion.so/Projeto-do-tradutor-63ab6e1d78f84f0287ee525aad41352d
 
