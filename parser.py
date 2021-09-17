@@ -1,85 +1,80 @@
-import re
+class Parser:
 
-class Parser():
+    def __init__(self, filename):
+        self.in_stream = open(filename, "r")
 
-    def __init__(self, input_file):
-        self.input_file = input_file
-        self.file = open(input_file, 'r')
-        text = self.file.read()
-        self.currTokenIndex = 0
-        self.file.close()
-        text = re.sub(r'\/\/.*', '', text)
-        self.commands = re.findall(r'[a-z]+\s[a-zA-Z\.]+\s[0-9]+|^[a-z]+', text, re.MULTILINE)
-        self.commands = tuple(map(lambda x: x.split(" "), self.commands))
+    def has_more_commands(self):
+        line = self.in_stream.readline()
 
-    def hasMoreCommands(self):
-        state = self.currTokenIndex <= len(self.commands)-1
-        return state
+        if line:
+            line = self.clean_line(line)
+
+            if line.startswith("//"):
+                return self.has_more_commands()
+            self.current_line = line
+            return True
+        return False
 
     def advance(self):
-        if (self.hasMoreCommands()):
-            self.currTokenIndex += 1
-    
-    def currCommand(self):
-        return self.commands[self.currTokenIndex]
+        self.current_command = self.current_line
+        self.tokenize()
 
-    def nextCommand(self):
-        command = self.currTokenIndex()
-        split = command.split(" ")
-        cmd = split[0]
-        if (command in ['add','sub','neg','eq','gt','lt','and','or','not']):
-            return "Arithmetic"
-        else:
-            if   (cmd == "pop"): 
-                return "Pop"
-            elif (cmd == "push"): 
-                return "Push"
-            elif (cmd == "call"): 
-                return "Call"
-            elif (cmd == "function"): 
-                return "Function"
-            elif (cmd == "return"): 
-                return "Return"
-            elif (cmd == "label"): 
-                return "Label"
-            elif (cmd == "goto"): 
-                return "Goto"
-            elif (cmd == "if-goto"): 
-                return "If"
-            else : 
-                return None
+    def command_type(self):
+        if len(self.tokens) == 1:
+            if self.get_arg1() == "return":
+                return "RETURN"
+            return "ARITHMETIC"
 
-    def commandType(self):
-        if self.commands[self.currTokenIndex][0] in ["add", "sub", "eq", "lt", "gt", "neg", "and", "or", "not"]:
-            return ("arithmetic", self.commands[self.currTokenIndex][0])
-        elif self.commands[self.currTokenIndex][0] == "push":
-            return ("push", self.commands[self.currTokenIndex][0])
-        elif self.commands[self.currTokenIndex][0] == "pop":
-            return ("pop", self.commands[self.currTokenIndex][0])
+        elif len(self.tokens) == 2:
+            if self.tokens["op_type"] == "label":
+                return "LABEL"
+            elif self.tokens["op_type"] == "goto":
+                return "GOTO"
+            elif self.tokens["op_type"] == "if-goto":
+                return "IF"
 
-    def arg1(self):
-        return self.commands[self.currTokenIndex][1]
+        elif len(self.tokens) == 3:
+            if self.tokens["op_type"] == "push":
+                return "PUSH"
 
-    def arg2(self):
-        return int(self.commands[self.currTokenIndex][2])
-    
-    def _arg1(self):
-        if(self.nextCommand() == "Arithmetic"):
-            return self.currTokenIndex()
-        elif(self.nextCommand() == "Return"):
-            return 0
-        else:
-            return self.currTokenIndex().split(" ")[1]
-    
-    def _arg2(self):
-        if(self.nextCommand() in ["Push", "Pop", "Function", "Call"]):
-            return self.currTokenIndex().split(" ")[2]
-        else:
-            return 0
+            elif self.tokens["op_type"] == "pop":
+                return "POP"
 
+            elif self.tokens["op_type"] == "function":
+                return "FUNCTION"
 
+            elif self.tokens["op_type"] == "call":
+                return "CALL"
 
+    def get_arg1(self):
+        return self.tokens["arg1"]
 
+    def get_arg2(self):
+        return self.tokens["arg2"]
 
+    def tokenize(self):
+        self.tokens = {}
 
+        tokens = self.current_command.split()
 
+        if len(tokens) == 1:
+            self.tokens["arg1"] = tokens[0]
+
+        elif len(tokens) == 2:
+            self.tokens["op_type"] = tokens[0]
+            self.tokens["arg1"] = tokens[1]
+
+        elif len(tokens) == 3:
+            self.tokens["arg1"] = tokens[1]
+            self.tokens["arg2"] = tokens[2]
+            self.tokens["op_type"] = tokens[0]
+
+    def get_tokens(self):
+        return self.tokens
+
+    def clean_line(self, line):
+        if "//" in line:
+            line = line[: line.index("//")]
+        line = line.strip(" ")
+        line = line.rstrip("\n")
+        return line

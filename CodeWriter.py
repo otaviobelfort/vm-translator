@@ -1,362 +1,616 @@
+
 class CodeWriter:
 
-    def __init__ (self, output_file):
-        self.output_f = open(output_file, "w")
-        self.module_name = "Bar"
-        # count ++
-        self.count_1 = 0
-        self.count_2 = 0
-        self.count_3 = 0
-        self.count_4 = 0
+    def __init__(self, out_path):
+        self.out_stream = open(out_path, "w")
+        self.file_name = out_path.split(".")[0]
+        self.op_count = {"eq": 0, "gt": 0, "lt": 0}
+        self.return_count = 0
 
-    def write(self, string):
-        self.output_f.write(string + "\n")
+    def writeArithmetic(self, operation):
+        if operation == "add":
+            code = f"""
+// add
+@SP
+M=M-1
+A=M
+D = M
+@SP
+M = M - 1
+A = M
+M = D + M
+@SP
+M = M + 1
+"""
+        elif operation == "sub":
+            code = f"""
+// sub
+@SP
+M = M - 1
+A = M
+D = M
+@SP
+M = M - 1
+A = M
+M = M - D
+@SP
+M = M + 1
+"""
+        elif operation == "neg":
+            code = f"""
+// neg
+@SP
+M = M - 1
+A = M
+M = -M
 
-    def close(self):
-        self.output_f.close()
+@SP
+M = M + 1
+"""
+        elif operation == "eq":
+            code = f"""
+// eq
+@SP
+M = M-1
+A = M
+D = M
+// D becomes y
 
-    def segmentPointer(self, segment, index):
-        if(segment == "local"): return "LCL"
-        elif(segment == "argument") : return "ARG"
-        elif(segment in ["this", "that"]) : return segment.upper()
-        elif(segment == "temp") : return "R{}".format(5+int(index))
-        elif(segment == "pointer") : return "R{}".format(3+int(index))
-        elif(segment == "static") : return "{}.{}".format(self.moduleName, index)
+@SP
+M = M-1
+A = M
+D = M-D
+
+// D becomes x - y
+@TRUE_eq_{self.op_count['eq']}
+// Jump if x == y
+D;JEQ
+
+// Jump unconditionally
+@FALSE_eq_{self.op_count['eq']}
+0;JMP
+
+(TRUE_eq_{self.op_count['eq']})
+@SP
+A = M
+M = -1
+
+@END_eq_{self.op_count['eq']}
+0;JMP
+
+(FALSE_eq_{self.op_count['eq']})
+@SP
+A = M
+M = 0
+
+(END_eq_{self.op_count['eq']})
+// SP++;
+@SP
+M = M + 1
+"""
+            self.op_count["eq"] += 1
+        elif operation == "gt":
+            code = f"""
+// gt
+@SP
+M = M-1
+A = M
+D = M
+// D becomes y
+
+@SP
+M = M-1
+A = M
+D = M-D
+
+// D becomes x - y
+@TRUE_gt_{self.op_count['gt']}
+// Jump if x > y
+D;JGT
+
+// Jump unconditionally
+@FALSE_gt_{self.op_count['gt']}
+0;JMP
+
+(TRUE_gt_{self.op_count['gt']})
+@SP
+A = M
+M = -1
+
+@END_gt_{self.op_count['gt']}
+0;JMP
+
+(FALSE_gt_{self.op_count['gt']})
+@SP
+A = M
+M = 0
+
+(END_gt_{self.op_count['gt']})
+// SP++;
+@SP
+M = M + 1
+"""
+            self.op_count["gt"] += 1
+        elif operation == "lt":
+            code = f"""
+// lt
+@SP
+M = M-1
+A = M
+D = M
+// D becomes y
+
+@SP
+M = M-1
+A = M
+D = M-D
+
+// D becomes x - y
+@TRUE_lt_{self.op_count['lt']}
+// Jump if x < y
+D;JLT
+
+// Jump unconditionally
+@FALSE_lt_{self.op_count['lt']}
+0;JMP
+
+(TRUE_lt_{self.op_count['lt']})
+@SP
+A = M
+M = -1
+
+@END_lt_{self.op_count['lt']}
+0;JMP
+
+(FALSE_lt_{self.op_count['lt']})
+@SP
+A = M
+M = 0
+
+(END_lt_{self.op_count['lt']})
+// SP++;
+@SP
+M = M + 1
+"""
+            self.op_count["lt"] += 1
+        elif operation == "and":
+            code = f"""
+// and
+@SP
+M = M - 1
+A = M
+D = M
+@SP
+M = M - 1
+A = M
+M = D & M
+@SP
+M = M + 1
+"""
+
+        elif operation == "or":
+            code = f"""
+// or
+@SP
+M = M - 1
+A = M
+// D becomes y
+D = M
+
+@SP
+M = M - 1
+A = M
+M = D|M
+@SP
+M = M + 1
+"""
+        elif operation == "not":
+            code = f"""
+// not
+// neg
+@SP
+M = M - 1
+A = M
+M = !M
+
+@SP
+M = M + 1     
+"""
         else:
-            return 'ERROR'
-    
-    def writeInit(self):
-        self.write("@256")
-        self.write("D=A")
-        self.write("@SP")
-        self.write("M=D")
-        self.writeCall("Sys.init", 0)
+            print("INVALID ARITHMETIC OPERATION!!!")
+        self.out_stream.write(code)
 
-    def writeBinary(self):
-        self.write("@SP")
-        self.write("AM=M-1")
-        self.write("D=M")
-        self.write("A=A-1")
+    def writePushPop(self, command_type, tokens):
+        base = {"local": "LCL", "argument": "ARG", "this": "THIS", "that": "THAT"}
 
-    def writeUnary(self):
-        self.write("@SP")
-        self.write("A=M")
-        self.write("A=A-1")
-# --------------------------------------
-    def writeArithmeticAdd(self):
-        self.writeBinary()
-        self.write("M=D+M")
+        if command_type == "PUSH":
+            if tokens["arg1"] == "constant":
+                code = f"""
+// push constant {tokens['arg2']}
+@{tokens['arg2']}
+D = A
+@SP
+A = M
+M = D
+@SP
+M = M + 1
+"""
+            elif tokens["arg1"] in ("local", "argument", "this", "that"):
+                code = f"""
+// push {tokens['arg1']} {tokens['arg2']}
+@{tokens['arg2']}
+D = A
+@{base[tokens['arg1']]} 
+A = D + M
+D = M
+@SP
+A = M
+M = D
+@SP
+M = M + 1
+"""
+            elif tokens["arg1"] == "static":
+                code = f"""
+// push static {tokens['arg2']}
+@{self.file_name}.{tokens['arg2']}
+D = M
+@SP
+A = M
+M = D
+@SP
+M = M + 1
+"""
+            elif tokens["arg1"] == "temp":
+                code = f"""
+// push temp {tokens['arg2']}
+@{tokens['arg2']}
+D = A
+@5
+A = D + A
+D = M
+@SP
+A = M
+M = D
+@SP
+M = M + 1
+"""
+            elif tokens["arg1"] == "pointer":
+                if tokens["arg2"] == "0":
+                    code = f"""
+// push pointer 0
+@THIS
+D = M
+@SP
+A = M
+M = D
+@SP
+M = M + 1
+"""
+                else:
+                    code = f"""
+// push pointer 1
+@THAT
+D = M
+@SP
+A = M
+M = D
+@SP
+M = M + 1
+"""
+        elif command_type == "POP":
+            if tokens["arg1"] in ("local", "argument", "this", "that"):
+                code = f"""
+// pop {tokens['arg1']} {tokens['arg2']}
+@{tokens['arg2']}
+D = A
+@{base[tokens['arg1']]}
+D = D + M
+@SP
+A = M
+M = D
+@SP
+M = M - 1
+@SP
+A = M
+D = M
+A = A + 1
+A = M
+M = D
+"""
+            elif tokens["arg1"] == "static":
+                code = f"""
+// pop static {tokens['arg2']}
+@SP
+M = M - 1
+A = M
+D = M
 
-    def writeArithmeticSub(self):
-        self.writeBinary()
-        self.write("M=M-D")
+@{self.file_name}.{tokens['arg2']}
+M = D
+"""
+            elif tokens["arg1"] == "temp":
+                code = f"""
+// pop temp {tokens['arg2']}
+@{tokens['arg2']}
+D = A
+@5
+D = D + A
+@SP
+A = M
+M = D
+@SP
+M = M - 1
+@SP
+A = M
+D = M
+A = A + 1
+A = M
+M = D
+"""
+            elif tokens["arg1"] == "pointer":
+                if tokens["arg2"] == "0":
+                    code = f"""
+// pop pointer 0
+@SP
+M = M - 1
+A = M
+D = M
 
-    def writeArithmeticAnd(self):
-        self.writeBinary()
-        self.write("M=D&M")
-    
-    def writeArithmeticOr(self):
-        self.writeBinary()
-        self.write("M=D|M")  
+@THIS 
+M = D
+"""
+                else:
+                    code = f"""
+// pop pointer 1
+@SP
+M = M - 1
+A = M
+D = M
 
-    def writeArithmeticNeg(self):
-        self.writeUnary()
-        self.write("M=-M") 
+@THAT 
+M = D
+"""
+        self.out_stream.write(code)
 
-    def writeArithmeticNot(self):
-        self.writeUnary()
-        self.write("M=!M")
-    
-    def writeArithmeticGt(self):
-        self.write("@SP")
-        self.write("AM=M-1")
-        self.write("D=M")
-        self.write("A=A-1")
-        self.write("D=M-D")
-
-        self.write("@GT{}".format(self.count_1))
-        self.write("D;JGT")
-        self.write("@SP")
-        self.write("A=M-1")
-        self.write("M=0")
-
-        self.write("@GTSTACK{}".format(self.count_1))
-        self.write("0;JMP")
-        self.write("(GT{})".format(self.count_1))
-        self.write("@SP")
-        self.write("A=M-1")
-        self.write("M=-1")
-        self.write("(GTSTACK{})".format(self.count_1))
-        self.count_1 +=1 
-             
-    def writeArithmeticEq(self):
-        self.write("@SP")
-        self.write("AM=M-1")
-        self.write("D=M")
-        self.write("A=A-1")
-        self.write("D=M-D")
-
-        self.write("@EQ{}".format(self.count_2))
-        self.write("D;JEQ")
-        self.write("@SP")
-        self.write("A=M-1")
-        self.write("M=0")
-
-        self.write("@EQSTACK{}".format(self.count_2))
-        self.write("0;JMP")
-        self.write("(EQ{})".format(self.count_2))
-        self.write("@SP")
-        self.write("A=M-1")
-        self.write("M=-1")
-        self.write("(EQSTACK{})".format(self.count_2))
-        self.count_2 += 1
-
-    def writeArithmeticLt(self):
-        self.write("@SP")
-        self.write("AM=M-1")
-        self.write("D=M")
-        self.write("A=A-1")
-        self.write("D=M-D")
-
-        self.write("@LT{}".format(self.count_3))
-        self.write("D;JLT")
-        self.write("@SP")
-        self.write("A=M-1")
-        self.write("M=0")
-
-        self.write("@LTSTACK{}".format(self.count_3))
-        self.write("0;JMP")
-        self.write("(LT{})".format(self.count_3))
-        self.write("@SP")
-        self.write("A=M-1")
-        self.write("M=-1")
-        self.write("(LTSTACK{})".format(self.count_3))
-        self.count_3 += 1
-# --------------------------------------
-
-
-    def writeArithmetic (self, command):
-
-        if(command == "add"):
-            self.writeArithmeticAdd()
-        elif(command == "sub"):
-            self.writeArithmeticSub()
-        elif (command == "and"):
-            self.writeArithmeticAnd()
-        elif (command == "or"):
-            self.writeArithmeticOr()
-        elif(command == "neg"):
-            self.writeArithmeticNeg()
-        elif (command == "not"):
-            self.writeArithmeticNot()
-        elif (command == "gt"):
-            self.writeArithmeticGt()
-        elif (command == "eq"):
-            self.writeArithmeticEq()
-        elif (command == "lt"):
-            self.writeArithmeticLt()
-        else:
-            pass
-            
-    
-    def writePush(self, segment, index):
-
-        if (segment == "constant"):
-            self.write("@{} // push constant {}".format(index, index))
-            self.write("D=A")
-            self.write("@SP")
-            self.write("A=M")
-            self.write("M=D")
-            self.write("@SP")
-            self.write("M=M+1")
-        elif (segment in ["local", "argument", "this", "that"]):
-            self.write("@{} // push {} {}".format(self.segmentPointer(segment, index), segment, index))
-            self.write("D=M")
-            self.write("@{}".format(index))
-            self.write("A=D+A")
-            self.write("D=M")
-            self.write("@SP")
-            self.write("A=M")
-            self.write("M=D")
-            self.write("@SP")
-            self.write("M=M+1")
-
-        elif(segment in ["temp", "pointer", "static"]):
-
-                self.write("@{} // push {}  {}".format(self.segmentPointer(segment, index), segment, index))
-                self.write("D=M")
-                self.write("@SP")
-                self.write("A=M")
-                self.write("M=D")
-                self.write("@SP")
-                self.write("M=M+1")
-    
-    def writePop(self, segment, index):
-        if (segment in ["static", "temp", "pointer"]):
-            self.write("@SP // pop {} {}".format(segment, index))
-            self.write("M=M-1")
-            self.write("A=M")
-            self.write("D=M")
-            self.write("@{}".format(self.segmentPointer(segment, index)))
-            self.write("M=D")
-        elif(segment in ["local", "argument", "this", "that"]):
-            self.write("@{} // pop {} {}".format(self.segmentPointer(segment, index), segment, index))
-            self.write("D=M")
-
-            self.write("@{}".format(index))
-            self.write("D=D+A")
-            self.write("@R13")
-            self.write("M=D")
-            self.write("@SP")
-            self.write("M=M-1")
-            self.write("A=M")
-            self.write("D=M")
-            self.write("@R13")
-            self.write("A=M")
-            self.write("M=D")
-    
-    def writeIf(self, label):
-        self.write("@SP")
-        self.write("AM=M-1")
-        self.write("D=M")
-        self.write("M=0")
-        self.write("@{}".format(label))
-        self.write("D;JNE")
-
-    def writeLabel(self, name):
-        self.write("({})".format(name))
+    def writeLabel(self, label):
+        code = f"\n// label {label}\n({label})\n"
+        self.out_stream.write(code)
 
     def writeGoto(self, label):
-        self.write("@{}".format(label))
-        self.write("0;JMP")
+        code = f"\n// goto {label}\n@{label}\n0;JMP"
+        self.out_stream.write(code)
 
-    def writeFunction(self, funcName, n):
-        loop = "{}_INIT_LOCALS_LOOP".format(funcName)
-        endLoop = "{}_INIT_LOCALS_END".format(funcName)
+    def writeIf(self, label):
+        code = f"""
+// if-goto label
+@SP
+M = M - 1
+A = M
+D = M
 
-        self.write("({})".format(funcName))
-        self.write("@{}".format(n))
-        self.write("D=A")
-        self.write("@R13")
-        self.write("M=D")
-        self.write("({})".format(loop))
-        self.write("@{}".format(endLoop))
-        self.write("D;JEQ")
-        self.write("@0")
-        self.write("D=A")
-        self.write("@SP")
-        self.write("A=M")
-        self.write("M=D")
-        self.write("@SP")
-        self.write("M=M+1")
-        self.write("@R13")
-        self.write("MD=M-1")
-        self.write("@{}".format(loop))
-        self.write("0;JMP")
-        self.write("({})".format(endLoop))
+@{label}
+D;JNE
+"""
+        self.out_stream.write(code)
 
-    def writeFramePush(self, value):
-        self.write("@{}".format(value))
-        self.write("D=M")
-        self.write("@SP")
-        self.write("A=M")
-        self.write("M=D")
-        self.write("@SP")
-        self.write("M=M+1")
+    def writeFunction(self, function_name, nvars):
+        code = f"""
+// function {function_name} {nvars}     
+({function_name})
+@{nvars}   
+D = A
+({function_name + "$local$loop"})
 
-    def writeCall(self, funcName, n):
+@{function_name + "$local$end"}
+D;JLE
 
-        returnAddres = "{}_RETURN_{}".format(funcName, self.count_4)
-        self.count_4 += 1
+@SP
+A = M
+M = 0
+@SP
+M = M + 1
 
-        self.write("@{}".format(returnAddres))
-        self.write("D=A")
-        self.write("@SP")
-        self.write("A=M")
-        self.write("M=D")
-        self.write("@SP")
-        self.write("M=M+1")
+@{function_name + "$local$loop"}
+D = D - 1
+0;JMP
+({function_name + "$local$end"})
+"""
+        self.out_stream.write(code)
 
-        self.writeFramePush("LCL")
-        self.writeFramePush("ARG")
-        self.writeFramePush("THIS")
-        self.writeFramePush("THAT")
+    def writeCall(self, function_name, nargs):
+        code = f"""
+// call {function_name} {nargs}
 
-        self.write("@{}".format(n))
-        self.write("D=A")
-        self.write("@5")
-        self.write("D=D+A")
-        self.write("@SP")
-        self.write("D=M-D")
-        self.write("@ARG")
-        self.write("M=D")
+// push retAddrLabel
+@{self.file_name}$return.{self.return_count}
+D = A
 
-        self.write("@SP")
-        self.write("D=M")
-        self.write("@LCL")
-        self.write("M=D")
+@SP
+A = M
+M = D
 
-        self.writeGoto(funcName)
+@SP
+M = M + 1
 
-        self.write("({})".format(returnAddres))
+// push LCL
+@LCL
+D = M
 
+// SP++;
+@SP
+A = M
+M = D
 
-    def writeReturn(self):
-        self.write("@LCL")
-        self.write("D=M")
+@SP
+M = M + 1
 
-        self.write("@R13")
-        self.write("M=D")
+// push ARG
+@ARG
+D = M
 
-        self.write("@5")
-        self.write("A=D-A")
-        self.write("D=M")
-        self.write("@R14")
-        self.write("M=D")
+// SP++;
+@SP
+A = M
+M = D
 
-        self.write("@SP")
-        self.write("AM=M-1")
-        self.write("D=M")
-        self.write("@ARG")
-        self.write("A=M")
-        self.write("M=D")
+@SP
+M = M + 1
 
-        self.write("D=A")
-        self.write("@SP")
-        self.write("M=D+1")
+// push THIS
+@THIS
+D = M
 
-        self.write("@R13")
-        self.write("AM=M-1")
-        self.write("D=M")
-        self.write("@THAT")
-        self.write("M=D")
+// SP++;
+@SP
+A = M
+M = D
 
-        self.write("@R13")
-        self.write("AM=M-1")
-        self.write("D=M")
-        self.write("@THIS")
-        self.write("M=D")
+@SP
+M = M + 1
 
-        self.write("@R13")
-        self.write("AM=M-1")
-        self.write("D=M")
-        self.write("@ARG")
-        self.write("M=D")
+// push THAT
+@THAT
+D = M
 
-        self.write("@R13")
-        self.write("AM=M-1")
-        self.write("D=M")
-        self.write("@LCL")
-        self.write("M=D")
+// SP++;
+@SP
+A = M
+M = D
 
-        self.write("@R14")
-        self.write("A=M")
-        self.write("0;JMP")
-    
+@SP
+M = M + 1
 
-        
+// ARG = SP - 5 - nargs
+@5
+D = A
 
+@SP
+D = M - D
 
+@{nargs}
+D = D - A
 
+@ARG 
+M = D
 
-        
+// LCL = SP
+@SP
+D = M
+
+@LCL
+M = D
+
+// goto functionName
+@{function_name}
+0;JMP
+
+({self.file_name}$return.{self.return_count})
+"""
+        self.return_count += 1
+        self.out_stream.write(code)
+
+    def write_return(self):
+        code = f"""
+// return
+
+// endFrame = LCL
+@LCL
+D = M
+
+@R13
+M = D
+
+// retAddr = *(endFrame - 5)
+@5
+D = D - A
+A = D
+D = M
+
+@R14
+M = D
+
+// *ARG = pop()
+@SP
+M = M - 1
+A = M
+D = M
+
+@ARG
+A = M
+M = D
+
+// SP = ARG + 1
+@ARG
+D = M
+
+@SP
+M = D + 1
+
+// THAT = *(endFrame - 1)
+@R13
+A = M - 1
+D = M
+
+@THAT
+M = D
+
+// THIS = *(endFrame - 2)
+@2
+D = A
+
+@R13
+D = M - D
+A = D
+D = M
+
+@THIS
+M = D
+
+// ARG = *(endFrame - 3)
+@3
+D = A
+
+@R13
+D = M - D
+A = D
+D = M
+
+@ARG
+M = D
+
+// LCL = *(endFrame - 4)
+@4
+D = A
+
+@R13
+D = M - D
+A = D
+D = M
+
+@LCL
+M = D
+
+@R14
+A = M
+0;JMP
+"""
+        self.out_stream.write(code)
+
+    def writeInit(self):
+        code = f"""
+// Bootstrap code
+// SP = 256
+@256
+D = A
+
+@SP
+M = D
+"""
+        self.out_stream.write(code)
+        self.writeCall("Sys.init", "0")
+
+    def set_file_name(self, new_filename):
+        self.file_name = new_filename
+
+    def close(self):
+        self.out_stream.close()
